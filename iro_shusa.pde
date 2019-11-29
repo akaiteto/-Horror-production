@@ -7,11 +7,11 @@ int subliminal_cnt = 0;
 
 int updateDisp_cnt = 0;
 
-//motion blur
+//Filter - motion blur
 int MOTIONBLUR_RANDOM_MOVE_X = 10;
 int MOTIONBLUR_RANDOM_MOVE_Y = 15;
 
-//iro shusa
+//Filter - iro shusa
 int IROSHUSA_SHIFT_RED_X = 10;
 int IROSHUSA_SHIFT_RED_Y = 10;
 int IROSHUSA_SHIFT_GREEN_X = 5;
@@ -19,8 +19,22 @@ int IROSHUSA_SHIFT_GREEN_Y = 5;
 int IROSHUSA_SHIFT_BLUE_X = 10;
 int IROSHUSA_SHIFT_BLUE_Y = 10;
 
-//Subliminal 
-int SUBLIMINAL_INTERVAL_FRAME = 20;
+//Filter - cutslide filter
+int CUTSLIDE_RANDOM_VERTICAL = 10;
+int CUTSLIDE_RANDOM_HORIZON = 20;
+
+//Filter - Subliminal 
+int SUBLIMINAL_INTERVAL_FRAME = 40;
+
+//Filter - ScanLine
+int SCANLINE_BODER_WEIGHT = 1;
+int SCANLINE_BODER_INTERVAL = 5;
+int SCANLINE_STROKE_COLOR = 220;
+
+class Position{
+  int x;
+  int y;
+}
 
 void setup() {
   imgArr = new  PImage[4];
@@ -36,25 +50,126 @@ void setup() {
 void draw() {
     background(0);
     
-    subliminal_cnt+=1;
-    
+   subliminal_cnt+=1;
+   PImage src  ;
+
     if(subliminal_cnt >= SUBLIMINAL_INTERVAL_FRAME){
-      PImage src = loadImage("download.jpg");
-      image(add_Noise(src), 0, 0);
+       src = loadImage("download.jpg");
+      PImage dst_img = src;
+      dst_img = add_Noise(dst_img);
+      dst_img = addScanLine(dst_img);
+      image(dst_img, 0, 0);
       subliminal_cnt=0;
-      
       SUBLIMINAL_INTERVAL_FRAME-=1;
       
     }else{
-      PImage src = loadImage("test.jpg");
+       src = loadImage("test.jpg");
       PImage dst_img = src;
       dst_img = motion_blur(dst_img,false);
       dst_img = add_IroShusa(dst_img);
+      dst_img = addScanLine(dst_img);
       image(dst_img, 0, 0);
     }
+    
+    addCutSlide(src);
+   
+//    saveFrame("image/####.png");
+//    if(subliminal_cnt >= SUBLIMINAL_INTERVAL_FRAME){
+//      PImage src = loadImage("download.jpg");
+//      image(add_Noise(src), 0, 0);
+//      subliminal_cnt=0;
+//      
+//      SUBLIMINAL_INTERVAL_FRAME-=1;
+//      
+//    }else{
+//      PImage src = loadImage("test.jpg");
+//      PImage dst_img = src;
+//      dst_img = motion_blur(dst_img,false);
+//      dst_img = add_IroShusa(dst_img);
+//      image(dst_img, 0, 0);
+//    }
     saveFrame("image/####.png");
 }
 
+
+PImage addScanLine(PImage _img) {
+
+  PImage img = _img;
+  int fill_cnt =0;
+  int nonfill_cnt =0;
+  String mode = "fill";
+  loadPixels(); 
+  img.loadPixels(); 
+  for (int y = 0; y < height; y++) {
+    println(mode);
+    for (int x = 0; x < width; x++) {
+      int loc = x + y*width;
+      
+      float r = red(img.pixels[loc]);
+      float g = green(img.pixels[loc]);
+      float b = blue(img.pixels[loc]);
+       
+      if(mode == "fill"){
+        img.pixels[loc]  =  add_Jousan(r,g,b,color(SCANLINE_STROKE_COLOR,SCANLINE_STROKE_COLOR,SCANLINE_STROKE_COLOR)); // Switch colors
+        //img.pixels[loc]  =    color(SCANLINE_STROKE_COLOR,SCANLINE_STROKE_COLOR,SCANLINE_STROKE_COLOR);
+       }
+    }
+    
+      if(mode == "fill"){
+        fill_cnt += 1;
+      }else{
+        nonfill_cnt += 1;
+      }
+      
+      if (fill_cnt >= SCANLINE_BODER_WEIGHT){
+        mode = "nonfill";
+        fill_cnt=0;
+      }else if (nonfill_cnt >= SCANLINE_BODER_INTERVAL){
+        mode = "fill";
+        nonfill_cnt=0;
+      }
+  }
+  
+  return img;
+  
+//  for (int y = 0; y < height; y+=SCANLINE_BODER_WEIGHT*SCANLINE_BODER_INTERVAL) {
+//    blendMode(MULTIPLY);
+    //stroke(SCANLINE_STROKE_COLOR);
+    //strokeWeight(SCANLINE_BODER_WEIGHT);
+    //line(0, y, width, y);
+  //}
+}
+
+void addCutSlide(PImage _img){
+  PImage img = _img;
+  int x=0;
+  int y=0;
+  push();
+  translate((width - img.width) / 2, (height - img.height) / 2);
+  if (floor(random(100)) > 80) {
+      x = floor(random(-width * 0.3, width * 0.7));
+      y = floor(random(-height * 0.1, height));
+      img = getRandomRectImg(_img);
+  }
+  image(img, x, y);
+  pop();
+  }
+  
+PImage getRandomRectImg(PImage srcImg) {
+        int startX;
+        int startY;
+        int rectW;
+        int rectH;
+        PImage destImg;
+        startX = floor(random(0, srcImg.width - 30));
+        startY = floor(random(0, srcImg.height - 50));
+        rectW = floor(random(30, srcImg.width - startX));
+        rectH = floor(random(1, 50));
+        destImg = srcImg.get(startX, startY, rectW, rectH);
+        destImg.loadPixels();
+        return destImg;
+    }
+  
 PImage add_IroShusa(PImage _img){
   PImage img = _img;
   
@@ -133,8 +248,56 @@ float[][] affineShiftConvert(float[][] src,int s_width,int s_height,int x_shift,
         if(dstPoint[0] >= s_width || dstPoint[1] >= s_height){
           // if pixel shift for out of range,do nothing
         }else{
-          dst[dstPoint[0]][dstPoint[1]] = 0;
+          dst[dstPoint[0]][dstPoint[1]] = 255;
         }
+      }
+    }
+  }
+  
+  return dst;
+}
+
+float[][] affineShiftConvert(float[][] src,int s_width,int s_height,int x_shift,int y_shift,int range_x_L,int range_x_R,int range_y_L,int range_y_R){
+  
+  float[][] dst = new float [s_width][s_height];
+  int[][] affine =  {{1,0,x_shift},
+                     {0,1,y_shift},
+                     {0,0,1}};
+  for (int y = 0; y < s_height; y++) {
+    for (int x = 0; x < s_width; x++) {
+      
+    int[] dstPoint = {0,0,0}; 
+    int[] srcPoint = {x,y,1};
+      
+      for (int r = 0; r < 3; r++) {
+        int tmp = 0;
+        for (int c = 0; c < 3; c++) {
+          tmp += affine[r][c]*srcPoint[c];
+          }
+        dstPoint[r] = tmp;
+      }  
+      
+      int x_move =0;
+      int y_move =0;
+      
+      
+            
+      if ((x >= range_x_L && x <= range_x_R ) && 
+          (y >= range_y_L && y <= range_y_R )) {
+            if (dstPoint[0] < s_width && dstPoint[1] < s_height) {
+                x_move = dstPoint[0];
+                y_move = dstPoint[1];
+                dst[x_move][y_move] += src[x][y];
+            }else{
+                if(dstPoint[0] >= s_width || dstPoint[1] >= s_height){
+                  // if pixel shift for out of range,do nothing
+          
+                }else{
+                  dst[dstPoint[0]][dstPoint[1]] = 0;
+                }
+            }
+      }else{
+        dst[x][y] += src[x][y];
       }
     }
   }
@@ -197,7 +360,6 @@ PImage motion_blur(PImage _img,Boolean addedNoise){
   MOTION_X = (int)random(MOTIONBLUR_RANDOM_MOVE_X);
   MOTION_Y = (int)random(MOTIONBLUR_RANDOM_MOVE_Y);
  
- println(MOTION_X,MOTION_Y);
   loadPixels(); 
   img.loadPixels(); 
   for (int y = 0; y < height; y++) {
